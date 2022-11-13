@@ -1,17 +1,52 @@
 #include <Arduino.h>
 #include <string.h>
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
 
 #define DEBUG_USART SerialUSB
 #define PANEL_USART Serial2
 
-#define LOOPTIME_MS 10
-#define DEBUGTIME_MS 250
+#define LOOPTIME_MS 50
+#define DEBUGTIME_MS 100
+
+#define MODE_TRANSMITTER
+//#define MODE_RECEIVER
+
+RF24 radio(PB0, PA4); // CE, CSN
+const byte addresses[][6] = {"00001", "00002"};
 
 void setup() {
+  //usarts
   DEBUG_USART.begin(115200);
   PANEL_USART.begin(115200);
+  //led
+  pinMode(PC13, OUTPUT);
+  //radio
+  radio.begin();
+  #ifdef MODE_RECEIVER
+  radio.openWritingPipe(addresses[1]); // 00001
+  radio.openReadingPipe(1, addresses[0]); // 00002
+  #else
+  radio.openWritingPipe(addresses[0]); // 00002
+  radio.openReadingPipe(1, addresses[1]); // 00001
+  #endif
+  radio.setPALevel(RF24_PA_MIN);
+  radio.setDataRate(RF24_1MBPS);
 }
 
+//radio
+typedef struct estrutura_data{
+  uint16_t pulse[8];
+  byte data[16];
+}data;
+#ifdef MODE_RECEIVER
+data rx_data;
+#else
+data tx_data;
+#endif
+
+//debug
 unsigned long lastPrint = 0;
 
 //BUFFER THINGS
@@ -43,8 +78,7 @@ void loop() {
     if(timeNow - lastPrint > DEBUGTIME_MS){
       lastPrint = timeNow;
       //debug start
-
-      Serial.println("Olar");
+      //Serial.println("Olar");
       if(rxBufReady){
         Serial.print("Message received: ");
         Serial.println(recvStr);
@@ -102,6 +136,27 @@ void loop() {
     }
 
 
+    #ifdef MODE_RECEIVER
+    //radio
+    radio.startListening();
+    if (radio.available()) {
+      while (radio.available()) {
+          radio.read(&rx_data, 32);
+      }
+    }
+    //led
+    if(rx_data.pulse[0] > 1500){
+      digitalWrite(PC13, LOW);
+    }else{
+      digitalWrite(PC13, HIGH);
+    }
+    #else
+    tx_data.pulse[0] = 55;
+    tx_data.pulse[1]++;
+    radio.stopListening();
+    radio.write(&tx_data, sizeof(data));
+    radio.flush_tx();
+    #endif
     //*********************** LOOP END **********************//
   }
 

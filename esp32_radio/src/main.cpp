@@ -46,7 +46,7 @@ const byte addresses[][6] = {"00001", "00002"};
 #define PANEL_USART Serial2
 
 #define LOOPTIME_MS 50
-#define DEBUGTIME_MS 100
+#define DEBUGTIME_MS 200
 
 SPIClass NRF_SPI(HSPI);
 
@@ -57,6 +57,9 @@ void setup() {
   //led
   pinMode(BUILTIN_LED, OUTPUT);
 
+  NRF_SPI.begin(14, 12, 13, 15);
+  LoRa.setSPI(NRF_SPI);
+  LoRa.setSPIFrequency(8000000);
   if (!LoRa.begin(915E6)) {
     Serial.println("Starting LoRa failed!");
   }else{
@@ -68,7 +71,6 @@ void setup() {
   init_sdcard();
   //radio
   //SPI.end();
-  NRF_SPI.begin(14, 12, 13, 15);
   radio.begin(&NRF_SPI);
   #ifdef MODE_RECEIVER
   radio.openWritingPipe(addresses[1]); // 00001
@@ -79,6 +81,14 @@ void setup() {
   #endif
   radio.setPALevel(RF24_PA_MAX);
   radio.setDataRate(RF24_1MBPS);
+
+  //RTC
+  Wire.begin();
+  delay(5);
+  //descomentar para setar o rtc. ordem dos bytes: sec-min-hrs-wdays-days-months-years
+  byte dateCfg[7] = {00,1,23,1,13,11,22}; 
+  //set_date(dateCfg);
+  
 }
 
 //radio
@@ -94,6 +104,9 @@ data tx_data;
 
 //debug
 unsigned long lastPrint = 0;
+//RTC
+date date_now;
+logData_t sample_now;
 
 //BUFFER THINGS
 #define RX_BUF_SIZE 100
@@ -130,7 +143,21 @@ void loop() {
         Serial.println(recvStr);
         rxBufCollected = true;
       }
+      //print date
+      Serial.print("Timestamp: ");
+      get_rtc(&date_now);
+      print_date(&date_now); 
 
+      //dummy data
+      sample_now.current = 12.3;
+      sample_now.humidity = 98.0;
+      sample_now.temp_dht = 25.0;
+      sample_now.temp_lm35 = 25.5;
+      sample_now.temp_ntc = 26.0;
+      sample_now.vbatt = 12.6;
+      sample_now.voltage = 3.78;
+      //save line
+      println_sdcard(&date_now, &sample_now);
 
       //debug end
     }
@@ -197,11 +224,19 @@ void loop() {
       digitalWrite(PC13, HIGH);
     }
     #else
+
     tx_data.pulse[0] = 55;
     tx_data.pulse[1]++;
     radio.stopListening();
     radio.write(&tx_data, sizeof(data));
     radio.flush_tx();
+    radio.txStandBy();
+
+    LoRa.beginPacket();
+    LoRa.print("hello ");
+    LoRa.print((int)tx_data.pulse[1]);
+    LoRa.endPacket();
+    LoRa.idle();
     #endif
     //------------------------ LOOP END ------------------------//
   }

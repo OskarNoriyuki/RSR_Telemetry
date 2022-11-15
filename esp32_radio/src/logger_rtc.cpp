@@ -1,5 +1,7 @@
 #include "logger_rtc.h"
 
+static const char *tag = "rtc";
+
 /*********************** PROTOTYPES ***********************/
 
 

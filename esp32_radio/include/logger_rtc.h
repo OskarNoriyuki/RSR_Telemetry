@@ -5,6 +5,8 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+/*********************** LOCAL LIB ***********************/
+#include "common.h"
 
 /********************* DEFINITIONS *********************/
 #define RTC_SECONDS 0x00                        

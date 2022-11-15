@@ -1,5 +1,7 @@
 #include "logger_sdc.h"
 
+static const char *tag = "sd_card";
+
 /*********************** PROTOTYPES **********************/
 static void myItoa(int number, char *mystring);
 
@@ -13,7 +15,9 @@ uint16_t SDinit = 1;
 uint16_t fileCounter = 0;
 char fileName[15];
 
-
+//test
+date date_now;
+logData_t sample_now;
 /*********************** FUNCTIONS ***********************/
 
 void init_sdcard(){
@@ -109,4 +113,27 @@ static void myItoa(int number, char *mystring) {
      number /= 10;
   }  
   //mystring[5]=0;
+}
+
+void TaskSDC(void *pvParameters){
+  init_sdcard();
+  vTaskDelay(100/portTICK_PERIOD_MS);
+
+  for(;;){
+    vTaskDelay(500/portTICK_PERIOD_MS);
+
+    get_rtc(&date_now);
+    print_date(&date_now); 
+    //dummy data
+    sample_now.current = 12.3;
+    sample_now.humidity = 98.0;
+    sample_now.temp_dht = 25.0;
+    sample_now.temp_lm35 = 25.5;
+    sample_now.temp_ntc = 26.0;
+    sample_now.vbatt = 12.6;
+    sample_now.voltage = 3.78;
+    //save line
+    println_sdcard(&date_now, &sample_now);
+  }
+
 }

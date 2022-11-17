@@ -23,8 +23,8 @@
 #define NRF_PIN_MOSI  MOSI        // According to arduino VSPI
 #define NRF_PIN_MISO  MISO        // According to arduino VSPI
 #define NRF_PIN_SCK   SCK         // According to arduino VSPI
-#define NRF_PIN_SS    GPIO_NUM_0
-#define NRF_PIN_CE    GPIO_NUM_4  // This pin features: PWM, ADC2_0, HSPI_HD, Touch0, RTC GPIO0
+#define NRF_PIN_SS    GPIO_NUM_26
+#define NRF_PIN_CE    GPIO_NUM_13  // This pin features: PWM, ADC2_0, HSPI_HD, Touch0, RTC GPIO0
 #else
 #define NRF_PIN_MOSI  MOSI        // According to arduino VSPI
 #define NRF_PIN_MISO  MISO        // According to arduino VSPI

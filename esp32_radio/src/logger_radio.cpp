@@ -16,7 +16,7 @@ data tx_data;
 
 void TaskRadio(void * pvParameters){
 
-    RADIO_SPI.begin(14, 12, 13, 15);
+    RADIO_SPI.begin(12, 14, 27, 32);
 
     //LoRa
     LoRa.setSPI(RADIO_SPI);

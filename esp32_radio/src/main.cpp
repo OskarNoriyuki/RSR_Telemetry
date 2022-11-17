@@ -10,12 +10,6 @@ TaskHandle_t HandleTask_NRF;
 TaskHandle_t HandleTask_SDC;
 TaskHandle_t HandleTask_USART;
 
-#define LOOPTIME_MS 50
-#define DEBUGTIME_MS 200
-
-#define LOOPTIME_US (unsigned long)LOOPTIME_MS*1000
-#define DEBUGTIME_US (unsigned long)DEBUGTIME_MS*1000
-
 void setup() {
   //usarts
   DEBUG_USART.begin(115200);

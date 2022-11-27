@@ -2,187 +2,158 @@
 #include <nRF24L01.h>
 #include <RF24.h>
 #include <LiquidCrystal.h>
+
+//led pins
 #define led1 6
-#define numParts 2
+
+//display macros
+#define NUM_PARTS 4
 #define displayPower A5
 
-//car constants:
-#define dirHyst 5    //ADC unit
-#define pulseHystUp 10    //ADC unit
-#define pulseHystDown 20    //ADC unit
-#define escWait 50 //ms
-#define steerCenter 1398
-#define R_steerLim 1122
-#define L_steerLim 1644
-#define tamanhoMedia 7
-
-//#define MODE_TRANSMITTER
-#define MODE_RECEIVER
-
+//display
 LiquidCrystal lcd(9,10, 5, 4, 3, 2);
+//display refresh global vars:
+unsigned long lastDisplay_refresh = 0;
+unsigned long display_period = 20;
+int refreshPart = 0;
+char printBuf[13];
+
+//RADIO
 RF24 radio(7,8); // CE, CSN
 const byte addresses[][6] = {"00001", "00002"};
+char rdata[32];
+
+//PROTOTYPES
+uint8_t DisplayRefreshPart(uint8_t part, char *message);
+void DisplayRefreshRxText(char *radio_rx_buf);
 
 void setup(){
+  //led
   pinMode(led1, OUTPUT);
+
+  //display control
   pinMode(displayPower, OUTPUT);
   digitalWrite(displayPower, LOW);
   delay(100);
+
+  //radio
   radio.begin();
-  #ifdef MODE_TRANSMITTER
-  radio.openWritingPipe(addresses[0]); // 00002
-  radio.openReadingPipe(1, addresses[1]); // 00001
-  #else
+  radio.setAutoAck(false);
   radio.openWritingPipe(addresses[1]); // 00001
   radio.openReadingPipe(1, addresses[0]); // 00002
-  #endif
   radio.setPALevel(RF24_PA_MIN);
   radio.setDataRate(RF24_1MBPS);
+  radio.startListening();
+
+  //lcd
   lcd.begin(24,2);
+
+  //debug serial
   Serial.begin(115200);
 }
-   
-typedef struct estrutura_data{
-  int pulse[4];
-  byte data[16];
-}data;
-data rdata; // return
-data tdata; // forward
 
-unsigned int lastDisplay_refresh = 0;
-int display_period = 20;
-int refreshPart = 0;
-
-//car vars:
-unsigned long lastRev;
-int read3v[20];
-int soma_r3;
-float media_r3;
-int media_r3i;
 
 void loop() {
-      delay(10);
-      //A0 vertical right, 
-      //A1 horizontal right
-      //A2 vertical left
-      //A3 horizontal left
-      //A6 pot
-      /*
-      center value:
-      A0 - 496
-      A1 - 517
-      A2 - 523
-      A3 - 505
-      */
-      int read1 = analogRead(A0); 
-      int read2 = analogRead(A1); //servo
-      int read3 = analogRead(A2); //esc
-      int read4 = analogRead(A3);
-      int read5 = analogRead(A6);
-      
-      //media movel
-      for(int k = (tamanhoMedia-2); k >= 0; k--){
-        read3v[k+1] = read3v[k];
-      }
-      read3v[0] = read3;
-      soma_r3 = 0;
-      for(int j = 0; j < tamanhoMedia; j++){
-        soma_r3 += read3v[j];
-      }
-      float media_r3 = (float)soma_r3/tamanhoMedia;
-      media_r3i = (int)media_r3;
-      Serial.println(media_r3i);
+  delay(10);
 
-      //controla ESC
-      int adcT = media_r3i;
-      switch(tdata.data[0]){
-        case 0:
-          if(adcT <= (525-dirHyst)){
-            tdata.data[0] = 1;
-            lastRev = millis();
-          }
-          if((millis() - lastRev) > escWait && adcT >= (525+pulseHystDown)){
-            tdata.pulse[0] = map(adcT, (525+pulseHystDown), 1023, 1000, 2000);
-          }else tdata.pulse[0] = 1000;
-        break;
-        case 1:
-          if(adcT >= (525+dirHyst)){
-            tdata.data[0] = 0;
-            lastRev = millis();
-          }
-          if((millis() - lastRev) > escWait && adcT <= (525-pulseHystUp)){
-            tdata.pulse[0] = map(adcT, (525-pulseHystUp) , 0, 1000, 2000);
-          }else tdata.pulse[0] = 1000;
-        break;
-        default:
-        tdata.pulse[0] = 1000;
-        break;
-      }
-      
-      if(read2 > 517)  tdata.pulse[1] = map(read2, 518, 1023, steerCenter, steerCenter - 300);
-      if(read2 <= 517) tdata.pulse[1] = map(read2, 517, 0, steerCenter, steerCenter + 300);
-      if(tdata.pulse[1] > L_steerLim) tdata.pulse[1] = L_steerLim;
-      if(tdata.pulse[1] < R_steerLim) tdata.pulse[1] = R_steerLim;
-      
-      #ifdef MODE_TRANSMITTER
-      radio.stopListening();
-      radio.write(&tdata, sizeof(data));
-      #else
-      //radio
-      radio.startListening();
-      if (radio.available()) {
-        while (radio.available()) {
-            radio.read(&rdata, 32);
-        }
-      }
-      #endif
+  //radio
+  if (radio.available()) {
+    while (radio.available()) {
+        radio.read(&rdata, 32);
+    }
+  }
 
-      if((millis() - lastDisplay_refresh)>display_period){
-        switch(refreshPart){
-          case 0:
-            #ifdef MODE_TRANSMITTER
-             lcd.setCursor(0, 0);
-             lcd.print("           ");
-             lcd.setCursor(0, 0);
-             lcd.print("esc: ");
-             lcd.print(tdata.pulse[0]);
+  //display
+  if((millis() - lastDisplay_refresh)>display_period){
+    DisplayRefreshRxText(rdata);
+    lastDisplay_refresh = millis();
+  }
+}
 
-             lcd.setCursor(18, 0);
-             lcd.print("      ");
-             lcd.setCursor(18, 0);
-             lcd.print("DIR:");
-             lcd.print(tdata.data[0]);
-             #else
-             lcd.setCursor(0, 0);
-             lcd.print("           ");
-             lcd.setCursor(0, 0);
-             lcd.print("pulse0: ");
-             lcd.print(rdata.pulse[0]);
-             #endif
-          break;
-          case 1:
-             #ifdef MODE_TRANSMITTER
-             lcd.setCursor(0, 1);
-             lcd.print("           ");
-             lcd.setCursor(0, 1);
-             lcd.print("servo: ");
-             lcd.print(tdata.pulse[1]);
-             #else
-             lcd.setCursor(0, 1);
-             lcd.print("           ");
-             lcd.setCursor(0, 1);
-             lcd.print("pulse1: ");
-             lcd.print(rdata.pulse[1]);
-             #endif
-          break;
-          /*
-           * 
-           */
-          default:
-          break;
-        }
-        refreshPart++;
-        if(refreshPart > (numParts - 1)) refreshPart = 0;
-        lastDisplay_refresh = millis();
-      }
+void DisplayRefreshRxText(char *radio_rx_buf){
+  //aux vars
+  int i, updt_ini_ch, updt_len;
+
+  //select rx buf part
+  switch(refreshPart){
+    case 0:{
+      updt_ini_ch = 0;
+      updt_len = 12;
+      break;
+    }
+    case 1:{
+      updt_ini_ch = 12;
+      updt_len = 12;
+      break;
+    }
+    case 2:{
+      updt_ini_ch = 24;
+      updt_len = 8;
+      break;
+    }
+    case 3:{
+      updt_ini_ch = 0;
+      updt_len = 0;
+      break;
+    }
+    default:
+      break;
+  }
+
+  //copy rx buf part
+  for(i = 0; i < updt_len; i++)
+    printBuf[i] = radio_rx_buf[i + updt_ini_ch];
+  printBuf[updt_len] = 0;
+
+  //refresh
+  DisplayRefreshPart(refreshPart, printBuf);
+
+  //update index
+  refreshPart++;
+  if(refreshPart >= NUM_PARTS) refreshPart = 0;
+}
+
+uint8_t DisplayRefreshPart(uint8_t part, char *message){
+  //aux variables
+  uint8_t column, line;
+  uint8_t ret = 0;
+
+  //select display region
+  switch(part){
+    case 0:{
+      column = 0;
+      line = 0;
+      ret = 1;
+      break;
+    }
+    case 1:{
+      column = 12;
+      line = 0;
+      ret = 1;
+      break;
+    }
+    case 2:{
+      column = 0;
+      line = 1;
+      ret = 1;
+      break;
+    }
+    case 3:{
+      column = 12;
+      line = 1;
+      ret = 1;
+      break;
+    }
+    default:
+      ret = 2;
+    break;
+  }
+
+  //refresh
+  lcd.setCursor(column, line);
+  lcd.print("            ");
+  lcd.setCursor(column, line);
+  lcd.print(message);
+
+  return ret;
 }
